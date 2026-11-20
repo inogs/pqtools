@@ -1,0 +1,239 @@
+# pqtools
+
+`pqtools` compares the surface chlorophyll-a concentration of the
+Mediterranean Sea from three different sources distributed by the
+[Copernicus Marine Service](https://marine.copernicus.eu/):
+
+| Source       | Dataset                                              | Resolution | Description                                   |
+|--------------|------------------------------------------------------|------------|-----------------------------------------------|
+| `reanalysis` | `cmems_mod_med_bgc-plankton_my_4.2km_P1D-m`          | ~4.2 km    | Biogeochemical model, multi-year reanalysis   |
+| `analysis`   | `cmems_mod_med_bgc-pft_anfc_4.2km_P1D-m`             | ~4.2 km    | Biogeochemical model, analysis and forecast   |
+| `satellite`  | `cmems_obs-oc_med_bgc-plankton_my_l3-multi-1km_P1D`  | ~1 km      | Multi-sensor ocean colour observations (L3)   |
+
+All the data are daily and are read directly from the Copernicus Marine
+servers: there is no need to download any file in advance.
+
+At the moment, `pqtools` can compute the **daily timeseries** of the
+chlorophyll averaged over a basin, for each of the three sources. The
+computation of comparison maps is planned but not implemented yet.
+
+
+## Installation
+
+### Requirements
+
+- Python 3.12 or later
+- [Poetry](https://python-poetry.org/) 2.x
+- A local copy of [bit.sea](https://github.com/inogs/bit.sea), which provides
+  the definitions of the basins and of the grids
+- A (free) account of the Copernicus Marine Service
+
+### Install the package
+
+`pqtools` depends on `bitsea`, which is installed from a local directory. The
+path of this directory is written in `pyproject.toml`
+(`bitsea @ file:///home/spiani/projects/bit.sea`): if your copy of bit.sea is
+somewhere else, update that line before installing.
+
+Then, from the root of the repository:
+
+```bash
+poetry install
+```
+
+This creates a virtual environment (in `.venv`) with all the dependencies and
+installs the `pqtools` command in it.
+
+> **Note:** `pyproject.toml` pins `python-dateutil` to the 2.x series. This is
+> not used directly by `pqtools`, but without it Poetry gets stuck for a very
+> long time while resolving the dependencies of `copernicusmarine` (all the
+> versions of `botocore` require `python-dateutil < 3`).
+
+### Copernicus Marine credentials
+
+Reading the data requires valid credentials of the Copernicus Marine Service.
+The simplest way is to save them once with:
+
+```bash
+poetry run copernicusmarine login
+```
+
+Alternatively, you can set the environment variables
+`COPERNICUSMARINE_SERVICE_USERNAME` and `COPERNICUSMARINE_SERVICE_PASSWORD`.
+
+
+## Usage
+
+After the installation, the command line interface is available as
+`pqtools` (inside the virtual environment) or as `poetry run pqtools`. It
+can also be run with `python -m pqtools`.
+
+```bash
+poetry run pqtools --help
+```
+
+The interface has two actions:
+
+- `compute_timeseries`: computes the daily timeseries of the chlorophyll on a
+  basin and saves them in a netCDF file;
+- `compute_comparison_maps`: **not implemented yet**.
+
+### `compute_timeseries`
+
+```bash
+poetry run pqtools compute_timeseries \
+    --start-date 2025-03-01 \
+    --end-date 2025-03-31 \
+    --satellite-average-window 3 \
+    --satellite-max-qi 3.5 \
+    -o timeseries_march_2025.nc
+```
+
+| Option                              | Required | Default | Description |
+|-------------------------------------|----------|---------|-------------|
+| `--start-date`                      | yes      |         | First day of the period (`YYYY-MM-DD`, inclusive) |
+| `--end-date`                        | yes      |         | Last day of the period (`YYYY-MM-DD`, inclusive); must not be earlier than `--start-date` |
+| `-o`, `--output-file`               | yes      |         | Output netCDF file; its directory must already exist |
+| `--satellite-average-window DAYS`   | no       | 3       | Half-width (in days) of the moving average applied to the satellite data; `0` disables it |
+| `--satellite-max-qi QI`             | no       | 0       | Threshold on the quality index of the satellite data; `0` disables the filter |
+
+Dates without a time zone are interpreted as UTC, which is the time
+reference of the datasets.
+
+> **Note:** the basin is currently fixed in the code (`adr1`, see
+> `src/pqtools/__main__.py`) and cannot be chosen from the command line.
+
+#### Output
+
+The output file is a netCDF file with a `time` dimension (one value per day
+of the requested period) and the following variables:
+
+| Variable              | Units  | Description |
+|-----------------------|--------|-------------|
+| `reanalysis_mean`     | mg m-3 | Spatial mean of the reanalysis chlorophyll |
+| `reanalysis_std`      | mg m-3 | Spatial standard deviation of the reanalysis chlorophyll |
+| `analysis_mean`       | mg m-3 | Spatial mean of the analysis chlorophyll |
+| `analysis_std`        | mg m-3 | Spatial standard deviation of the analysis chlorophyll |
+| `satellite_mean`      | mg m-3 | Spatial mean of the satellite chlorophyll |
+| `satellite_std`       | mg m-3 | Spatial standard deviation of the satellite chlorophyll |
+| `satellite_coverage`  | %      | Percentage of the area of the basin covered by valid satellite data |
+
+The global attributes of the file record the basin and the options used for
+the satellite data. If a source has no data on some days of the period
+(e.g. the analysis before July 2024), its variables are NaN on those days.
+
+
+## How the timeseries are computed
+
+For each source, `compute_timeseries` performs the following steps.
+
+1. **Download.** The surface chlorophyll (for the models, the first depth
+   level, about 1 m) is read on the bounding box of the basin, clipped to the
+   Mediterranean Sea. The units are checked and always returned as `mg m-3`.
+
+2. **Quality control of the satellite data.**
+   - The values outside the valid range declared by the product
+     (0.01 – 100 mg m-3) are always removed.
+   - If `--satellite-max-qi` is greater than 0, the values whose quality
+     index `QI_CHL` is, in absolute value, strictly greater than the
+     threshold are removed, together with the values without a quality
+     index. `QI_CHL` is the anomaly of the daily value with respect to the
+     climatology, in units of climatological standard deviations: it is not
+     an error flag, and high values can also be real events (e.g. blooms).
+
+3. **Moving average of the satellite data.** If
+   `--satellite-average-window` is greater than 0, the satellite data are
+   smoothed in time with a centered window of `2 * DAYS + 1` days, to fill
+   the cells left empty by clouds. For each cell, the result is the
+   **geometric mean** of the valid observations in the window (i.e. the
+   exponential of the mean of their logarithms), since the chlorophyll is
+   approximately log-normally distributed; if the cell has no valid
+   observations in the window, it stays NaN. The data are downloaded on a
+   period extended by `DAYS` days on both sides, so that every day of the
+   requested period has its full window.
+
+4. **Masks.** The values outside the mask of their source are set to NaN:
+   - **model mask:** the land/sea masks of the analysis and of the
+     reanalysis are downloaded from their static datasets and combined (a
+     point is sea only if it is sea in both), so that the two model sources
+     are compared on exactly the same points;
+   - **satellite mask:** the L3 product has no static mask, and its NaNs mark
+     both land and clouds. The mask is therefore built from the gap-free L4
+     version of the same product
+     (`cmems_obs-oc_med_bgc-plankton_my_l4-gapfree-multi-1km_P1D`), which is
+     defined on the same grid and whose NaNs mark land only;
+   - both masks are then restricted to the points inside the basin.
+
+5. **Statistics.** For each day, the spatial mean and standard deviation are
+   computed on the valid values only, **weighting each cell with its area**.
+   The standard deviation is the one of the weighted population (no
+   correction for the degrees of freedom). For the satellite, the coverage is
+   the ratio between the area of the cells with valid data and the area of
+   the satellite mask.
+
+The model and the satellite data are **not regridded**: each source is
+averaged on its own grid and only the resulting timeseries are compared.
+
+
+## Things to keep in mind
+
+- **Data availability.** The analysis is available only from 23 July 2024,
+  while the reanalysis and the satellite cover several decades. If the
+  requested period is *partially* outside the availability of a source, the
+  missing days are NaN; if it is *entirely* outside, the command fails with
+  an error raised by `copernicusmarine`.
+- **Different coastlines.** The model grid (~4.2 km) and the satellite grid
+  (~1 km) do not have the same coastline, so the area of the basin is
+  slightly different for the two (e.g. about 6% larger for the satellite in
+  the northern Adriatic Sea). This matters most in basins with complex
+  coasts.
+- **Coastal lagoons.** The satellite mask includes as sea about 0.1% of
+  points where the L3 product never has valid data (mainly coastal lagoons,
+  such as the Nile delta lagoons and the Venice lagoon, and narrow channels
+  between islands). They do not affect the mean, but they slightly lower the
+  coverage, which therefore never reaches exactly 100%.
+- **Precision.** All the computations are done in single precision
+  (`float32`), which is more than enough for these data and halves the
+  memory usage.
+- **Dataset versions.** The Copernicus Marine Service periodically retires
+  old versions of its datasets (`copernicusmarine` prints a warning when a
+  version is going to be retired). If a dataset stops working, check the
+  identifiers in `src/pqtools/components/data_retrievers.py` and
+  `src/pqtools/components/masks.py`.
+- **Performance.** The data are read lazily with dask and only the parts
+  needed for the requested period and basin are transferred. Long periods on
+  large basins (e.g. the whole Mediterranean Sea at 1 km) still require
+  transferring a large amount of data.
+
+
+## Project structure
+
+```
+src/pqtools/
+├── __main__.py                    # Entry point of the `pqtools` command
+└── components/
+    ├── cli.py                     # Command line interface (argparse)
+    ├── basins.py                  # Bounding boxes of the basins
+    ├── data_retrievers.py         # Download and harmonisation of the data
+    ├── satellite_processing.py    # Moving geometric mean of the satellite data
+    ├── masks.py                   # Land/sea masks, basin masks and cell areas
+    └── compute_timeseries.py      # Computation of the timeseries
+```
+
+The functions in these modules can also be used directly from Python, e.g.:
+
+```python
+from datetime import datetime
+
+from bitsea.basins import Basin
+
+from pqtools.components.compute_timeseries import TimeseriesOptions
+from pqtools.components.compute_timeseries import compute_timeseries
+
+timeseries = compute_timeseries(
+    start_date=datetime(2025, 3, 1),
+    end_date=datetime(2025, 3, 31),
+    basin=Basin.load_from_uuid("adr1"),
+    options=TimeseriesOptions(half_satellite_window_size=3),
+)
+```
