@@ -77,9 +77,7 @@ def non_negative_float_argument(value: str) -> float:
     try:
         number = float(value)
     except ValueError:
-        raise argparse.ArgumentTypeError(
-            f'"{value}" is not a valid number'
-        )
+        raise argparse.ArgumentTypeError(f'"{value}" is not a valid number')
     if not math.isfinite(number):
         raise argparse.ArgumentTypeError(
             f"the value must be a finite number; received {value}"
@@ -95,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pqtools",
         description="Compare chlorophyll values from the Copernicus Marine "
-                    "analysis, reanalysis and satellite products.",
+        "analysis, reanalysis and satellite products.",
     )
     subparsers = parser.add_subparsers(
         dest="action",
@@ -129,31 +127,32 @@ def build_parser() -> argparse.ArgumentParser:
         required=False,
         metavar="DAYS",
         help="half-width, in days, of the centered moving average applied "
-             "to the satellite data to fill the cells left empty by clouds "
-             "or missing passes. The value of each day is the average of "
-             "the DAYS days before, the day itself and the DAYS days after "
-             "(i.e. over 2*DAYS+1 days; e.g. 3 means a 7-day window). "
-             "Use 0 to disable the average and keep the daily values "
-             "(default: %(default)s)",
+        "to the satellite data to fill the cells left empty by clouds "
+        "or missing passes. The value of each day is the average of "
+        "the DAYS days before, the day itself and the DAYS days after "
+        "(i.e. over 2*DAYS+1 days; e.g. 3 means a 7-day window). "
+        "Use 0 to disable the average and keep the daily values "
+        "(default: %(default)s)",
     )
 
     timeseries.add_argument(
         "--satellite-max-qi",
         type=non_negative_float_argument,
-        default=0.,
+        default=0.0,
         required=False,
         metavar="QI",
         help="threshold on the quality index (QI_CHL) of the satellite "
-             "data, i.e. the anomaly with respect to the climatology in "
-             "units of climatological standard deviations. The satellite "
-             "values with |QI_CHL| strictly greater than QI, and the ones "
-             "without a quality index, are removed before any other "
-             "processing. Use 0 to disable the filter "
-             "(default: %(default)s)",
+        "data, i.e. the anomaly with respect to the climatology in "
+        "units of climatological standard deviations. The satellite "
+        "values with |QI_CHL| strictly greater than QI, and the ones "
+        "without a quality index, are removed before any other "
+        "processing. Use 0 to disable the filter "
+        "(default: %(default)s)",
     )
 
     timeseries.add_argument(
-        "-o", "--output-file",
+        "-o",
+        "--output-file",
         type=output_file_argument,
         required=True,
         help="path of the output file; its directory must already exist",
@@ -181,7 +180,10 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parser = build_parser()
     parsed = parser.parse_args(args)
 
-    if parsed.action == COMPUTE_TIMESERIES and parsed.start_date > parsed.end_date:
+    if (
+        parsed.action == COMPUTE_TIMESERIES
+        and parsed.start_date > parsed.end_date
+    ):
         parser.error(
             f"--start-date ({parsed.start_date.date()}) must not be later "
             f"than --end-date ({parsed.end_date.date()})"

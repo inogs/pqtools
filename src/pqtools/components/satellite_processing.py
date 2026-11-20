@@ -106,13 +106,15 @@ def log_moving_average(data: xr.DataArray, half_window: int) -> xr.DataArray:
 
     daily_data = _to_daily_time_axis(data)
 
-
-
-    log_mean = cast(xr.DataArray, cast(object, np.log(daily_data))).rolling(
-        time=2 * half_window + 1,
-        center=True,
-        min_periods=MOVING_AVERAGE_MIN_OBSERVATIONS,
-    ).mean()
+    log_mean = (
+        cast(xr.DataArray, cast(object, np.log(daily_data)))
+        .rolling(
+            time=2 * half_window + 1,
+            center=True,
+            min_periods=MOVING_AVERAGE_MIN_OBSERVATIONS,
+        )
+        .mean()
+    )
 
     averaged = np.exp(log_mean)
     averaged.name = data.name

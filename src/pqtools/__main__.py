@@ -4,8 +4,8 @@ from pqtools.components.cli import COMPUTE_COMPARISON_MAPS
 from pqtools.components.cli import COMPUTE_TIMESERIES
 from pqtools.components.cli import parse_args
 
-
 BASIN = Basin.load_from_uuid("adr1")
+
 
 def main() -> int:
     args = parse_args()

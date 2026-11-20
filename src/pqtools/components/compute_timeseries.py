@@ -1,7 +1,7 @@
+from dataclasses import dataclass
+from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
-from datetime import timezone
-from dataclasses import dataclass
 
 import numpy as np
 import xarray as xr
@@ -21,7 +21,7 @@ from pqtools.components.satellite_processing import log_moving_average
 @dataclass(frozen=True, slots=True)
 class TimeseriesOptions:
     half_satellite_window_size: int = 0
-    satellite_max_qi: float = 0.
+    satellite_max_qi: float = 0.0
 
 
 def _as_naive_utc(date: datetime) -> np.datetime64:
@@ -30,7 +30,7 @@ def _as_naive_utc(date: datetime) -> np.datetime64:
     Naive datetimes are interpreted as UTC.
     """
     if date.tzinfo is not None:
-        date = date.astimezone(timezone.utc).replace(tzinfo=None)
+        date = date.astimezone(UTC).replace(tzinfo=None)
     return np.datetime64(date)
 
 
@@ -38,8 +38,8 @@ SATELLITE_COVERAGE_VARIABLE = "satellite_coverage"
 
 
 def _weighted_mean_and_std(
-        data: xr.DataArray,
-        cell_area: xr.DataArray,
+    data: xr.DataArray,
+    cell_area: xr.DataArray,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """Computes the spatial mean and standard deviation weighted on the area.
 
@@ -70,7 +70,7 @@ def _weighted_mean_and_std(
     # for the std, i.e. of the same order of the accuracy of the areas
     # computed by bitsea and negligible with respect to the uncertainty of
     # the data, while float32 halves the memory
-    weights = cell_area.fillna(0.)
+    weights = cell_area.fillna(0.0)
     weighted = data.weighted(weights)
     spatial_dims = ("latitude", "longitude")
     return weighted.mean(dim=spatial_dims), weighted.std(dim=spatial_dims)
@@ -92,10 +92,15 @@ def _coverage(data: xr.DataArray, cell_area: xr.DataArray) -> xr.DataArray:
     spatial_dims = ("latitude", "longitude")
     total_area = cell_area.sum(dim=spatial_dims)
     valid_area = cell_area.where(data.notnull()).sum(dim=spatial_dims)
-    return 100. * valid_area / total_area
+    return 100.0 * valid_area / total_area
 
 
-def compute_timeseries(start_date: datetime, end_date: datetime, basin: Basin, options: TimeseriesOptions | None = None) -> xr.Dataset:
+def compute_timeseries(
+    start_date: datetime,
+    end_date: datetime,
+    basin: Basin,
+    options: TimeseriesOptions | None = None,
+) -> xr.Dataset:
     """Computes the daily timeseries of the chlorophyll on a basin.
 
     For each source (reanalysis, analysis and satellite), the surface
@@ -144,7 +149,9 @@ def compute_timeseries(start_date: datetime, end_date: datetime, basin: Basin, o
             # The satellite data are downloaded on a period extended by the
             # half-width of the moving average on both sides, so that every
             # day in [start_date, end_date] has its full window
-            window_extension = timedelta(days=options.half_satellite_window_size)
+            window_extension = timedelta(
+                days=options.half_satellite_window_size
+            )
             satellite_data = download_data(
                 start_date=start_date - window_extension,
                 end_date=end_date + window_extension,
@@ -170,7 +177,9 @@ def compute_timeseries(start_date: datetime, end_date: datetime, basin: Basin, o
     regional_satellite_mask = get_satellite_mask(bounding_box=bounding_box)
 
     model_mask = cut_mask_on_basin(mask=regional_model_mask, basin=basin)
-    satellite_mask = cut_mask_on_basin(mask=regional_satellite_mask, basin=basin)
+    satellite_mask = cut_mask_on_basin(
+        mask=regional_satellite_mask, basin=basin
+    )
 
     masks = {
         DataSource.ANALYSIS: model_mask,
@@ -197,13 +206,13 @@ def compute_timeseries(start_date: datetime, end_date: datetime, basin: Basin, o
         mean, std = _weighted_mean_and_std(data, cell_areas[data_source])
         variables[f"{data_source.value}_mean"] = mean.assign_attrs(
             long_name=f"Spatial mean of the {data_source.value} chlorophyll, "
-                      f"weighted on the area of the cells",
+            f"weighted on the area of the cells",
             units=data.attrs["units"],
         )
         variables[f"{data_source.value}_std"] = std.assign_attrs(
             long_name=f"Spatial standard deviation of the "
-                      f"{data_source.value} chlorophyll, weighted on the "
-                      f"area of the cells",
+            f"{data_source.value} chlorophyll, weighted on the "
+            f"area of the cells",
             units=data.attrs["units"],
         )
 
@@ -211,7 +220,7 @@ def compute_timeseries(start_date: datetime, end_date: datetime, basin: Basin, o
         datasets[DataSource.SATELLITE], cell_areas[DataSource.SATELLITE]
     ).assign_attrs(
         long_name="Percentage of the area of the basin covered by valid "
-                  "satellite data",
+        "satellite data",
         units="%",
     )
 

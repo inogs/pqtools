@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from enum import Enum
 from types import MappingProxyType
 
@@ -15,18 +16,22 @@ class DataSource(Enum):
     SATELLITE = "satellite"
 
 
-DATASETS: MappingProxyType[DataSource, "str"] = MappingProxyType({
-    DataSource.REANALYSIS: "cmems_mod_med_bgc-plankton_my_4.2km_P1D-m",
-    DataSource.ANALYSIS: "cmems_mod_med_bgc-pft_anfc_4.2km_P1D-m",
-    DataSource.SATELLITE: "cmems_obs-oc_med_bgc-plankton_my_l3-multi-1km_P1D",
-})
+DATASETS: MappingProxyType[DataSource, "str"] = MappingProxyType(
+    {
+        DataSource.REANALYSIS: "cmems_mod_med_bgc-plankton_my_4.2km_P1D-m",
+        DataSource.ANALYSIS: "cmems_mod_med_bgc-pft_anfc_4.2km_P1D-m",
+        DataSource.SATELLITE: "cmems_obs-oc_med_bgc-plankton_my_l3-multi-1km_P1D",
+    }
+)
 
 # Name of the chlorophyll variable inside each dataset
-CHLOROPHYLL_VARIABLES: MappingProxyType[DataSource, "str"] = MappingProxyType({
-    DataSource.REANALYSIS: "chl",
-    DataSource.ANALYSIS: "chl",
-    DataSource.SATELLITE: "CHL",
-})
+CHLOROPHYLL_VARIABLES: MappingProxyType[DataSource, "str"] = MappingProxyType(
+    {
+        DataSource.REANALYSIS: "chl",
+        DataSource.ANALYSIS: "chl",
+        DataSource.SATELLITE: "CHL",
+    }
+)
 
 # Name of the variable returned by `download_data`, whatever the source
 OUTPUT_VARIABLE = "chl"
@@ -36,7 +41,7 @@ OUTPUT_VARIABLE = "chl"
 # xarray does not apply these attributes automatically, and the dataset
 # does contain values outside this range
 SATELLITE_VALID_MIN = 0.01
-SATELLITE_VALID_MAX = 100.
+SATELLITE_VALID_MAX = 100.0
 
 # Quality index of the satellite product: the anomaly of the daily value
 # with respect to the climatology, in units of climatological standard
@@ -48,22 +53,26 @@ OUTPUT_UNITS = "mg m-3"
 
 # Spellings of mg/m^3 that can be found in the `units` attribute of the
 # datasets; all of them are rewritten as OUTPUT_UNITS
-ACCEPTED_UNITS = frozenset({
-    "mg m-3",
-    "mg m^-3",
-    "mg/m3",
-    "mg/m^3",
-    "mg.m-3",
-    "milligram m-3",
-    "milligram m^-3",
-})
+ACCEPTED_UNITS = frozenset(
+    {
+        "mg m-3",
+        "mg m^-3",
+        "mg/m3",
+        "mg/m^3",
+        "mg.m-3",
+        "milligram m-3",
+        "milligram m^-3",
+    }
+)
 
 
 class UnexpectedUnitsError(ValueError):
     """Raised when a dataset provides chlorophyll in units other than mg/m^3."""
 
 
-def _normalize_units(data: xr.DataArray, data_source: "DataSource") -> xr.DataArray:
+def _normalize_units(
+    data: xr.DataArray, data_source: "DataSource"
+) -> xr.DataArray:
     """Checks that `data` is in mg/m^3 and writes its units as OUTPUT_UNITS.
 
     Raises:
@@ -73,7 +82,7 @@ def _normalize_units(data: xr.DataArray, data_source: "DataSource") -> xr.DataAr
     units = data.attrs.get("units")
     if units is None or units.strip() not in ACCEPTED_UNITS:
         raise UnexpectedUnitsError(
-            f'The chlorophyll of the {data_source.value} dataset '
+            f"The chlorophyll of the {data_source.value} dataset "
             f'"{DATASETS[data_source]}" has units {units!r}, while mg/m^3 '
             f"was expected (accepted spellings: {sorted(ACCEPTED_UNITS)})"
         )
@@ -89,16 +98,16 @@ def _as_utc(date: datetime) -> datetime:
     the previous day, and the last day would be excluded).
     """
     if date.tzinfo is None:
-        return date.replace(tzinfo=timezone.utc)
+        return date.replace(tzinfo=UTC)
     return date
 
 
 def download_data(
-        start_date: datetime,
-        end_date: datetime,
-        region: BoundingBox,
-        data_source: DataSource,
-        satellite_max_qi: float = 0.
+    start_date: datetime,
+    end_date: datetime,
+    region: BoundingBox,
+    data_source: DataSource,
+    satellite_max_qi: float = 0.0,
 ) -> xr.DataArray:
     """Retrieves the surface chlorophyll-a concentration from Copernicus Marine.
 
@@ -215,7 +224,7 @@ def download_data(
         variables=variables,
         start_datetime=_as_utc(start_date),
         end_datetime=_as_utc(end_date),
-        **region.cut_on_mediterranean_sea().to_dict()
+        **region.cut_on_mediterranean_sea().to_dict(),
     )
 
     # Only the surface layer of the model datasets is kept. This must be

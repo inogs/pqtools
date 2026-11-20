@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import numpy as np
 from bitsea.basins import Basin
 
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -31,6 +30,7 @@ class BoundingBox:
         minimum_longitude: The westernmost longitude of the bounding box.
         maximum_longitude: The easternmost longitude of the bounding box.
     """
+
     minimum_latitude: float
     maximum_latitude: float
     minimum_longitude: float
@@ -40,8 +40,12 @@ class BoundingBox:
         return BoundingBox(
             minimum_latitude=max(self.minimum_latitude, MED_MINIMUM_LATITUDE),
             maximum_latitude=min(self.maximum_latitude, MED_MAXIMUM_LATITUDE),
-            minimum_longitude=max(self.minimum_longitude, MED_MINIMUM_LONGITUDE),
-            maximum_longitude=min(self.maximum_longitude, MED_MAXIMUM_LONGITUDE),
+            minimum_longitude=max(
+                self.minimum_longitude, MED_MINIMUM_LONGITUDE
+            ),
+            maximum_longitude=min(
+                self.maximum_longitude, MED_MAXIMUM_LONGITUDE
+            ),
         )
 
     def to_dict(self):
@@ -139,17 +143,20 @@ def basin_to_bounding_box(basin: Basin) -> BoundingBox:
         if max_lat is None or max_lat < current_max_lat:
             max_lat = current_max_lat
 
-    if max_lat is None or min_lat is None or max_lon is None or min_lon is None:
+    if (
+        max_lat is None
+        or min_lat is None
+        or max_lon is None
+        or min_lon is None
+    ):
         raise ValueError("No points found on the boundary of the basin")
 
-    if max_lat > MED_MAXIMUM_LATITUDE:
-        max_lat = MED_MAXIMUM_LATITUDE
-    if min_lat < MED_MINIMUM_LATITUDE:
-        min_lat = MED_MINIMUM_LATITUDE
+    max_lat = min(max_lat, MED_MAXIMUM_LATITUDE)
+    min_lat = max(min_lat, MED_MINIMUM_LATITUDE)
 
     return BoundingBox(
-        minimum_longitude = min_lon,
-        maximum_longitude = max_lon,
-        minimum_latitude = min_lat,
-        maximum_latitude = max_lat,
+        minimum_longitude=min_lon,
+        maximum_longitude=max_lon,
+        minimum_latitude=min_lat,
+        maximum_latitude=max_lat,
     )

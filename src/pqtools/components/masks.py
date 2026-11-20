@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 
 import copernicusmarine
 import numpy as np
@@ -13,13 +14,15 @@ REANALYSIS_DATASET = "cmems_mod_med_bgc_my_4.2km_static"
 
 # Gap-free (cloud-interpolated) version of the satellite product: it is
 # defined on the same 1 km grid as the L3 data and its NaNs mark land only
-SATELLITE_L4_DATASET = "cmems_obs-oc_med_bgc-plankton_my_l4-gapfree-multi-1km_P1D"
+SATELLITE_L4_DATASET = (
+    "cmems_obs-oc_med_bgc-plankton_my_l4-gapfree-multi-1km_P1D"
+)
 SATELLITE_L4_VARIABLE = "CHL"
 
 # Day of the L4 dataset used to build the satellite mask. The land/sea
 # pattern of the L4 product does not change in time, so any day works; a
 # fixed one keeps the mask reproducible.
-SATELLITE_MASK_DATE = datetime(2024, 1, 15, tzinfo=timezone.utc)
+SATELLITE_MASK_DATE = datetime(2024, 1, 15, tzinfo=UTC)
 
 
 class MaskMisalignmentError(ValueError):
@@ -44,9 +47,11 @@ def get_model_mask(bounding_box: BoundingBox) -> xr.DataArray:
     ds_masks = []
     for ds_name in (ANALYSIS_DATASET, REANALYSIS_DATASET):
         mask_data = copernicusmarine.open_dataset(
-            dataset_id = ds_name,
-            variables = ["mask",],
-            **bounding_box.cut_on_mediterranean_sea().to_dict()
+            dataset_id=ds_name,
+            variables=[
+                "mask",
+            ],
+            **bounding_box.cut_on_mediterranean_sea().to_dict(),
         )
         ds_masks.append(mask_data["mask"].isel(depth=0, drop=True))
 
@@ -111,7 +116,7 @@ def get_satellite_mask(bounding_box: BoundingBox) -> xr.DataArray:
         variables=[SATELLITE_L4_VARIABLE],
         start_datetime=SATELLITE_MASK_DATE,
         end_datetime=SATELLITE_MASK_DATE,
-        **bounding_box.cut_on_mediterranean_sea().to_dict()
+        **bounding_box.cut_on_mediterranean_sea().to_dict(),
     )
     chl = l4_data[SATELLITE_L4_VARIABLE].isel(time=0, drop=True)
 
@@ -123,7 +128,7 @@ def get_satellite_mask(bounding_box: BoundingBox) -> xr.DataArray:
     mask.name = "mask"
     mask.attrs = {
         "long_name": "Satellite land-sea mask (from the L4 gap-free product): "
-                     "True = sea ; False = land",
+        "True = sea ; False = land",
     }
     return mask
 
@@ -176,7 +181,9 @@ def cut_mask_on_basin(mask: xr.DataArray, basin: Basin) -> xr.DataArray:
         mask["longitude"].values, mask["latitude"].values
     )
     is_inside = xr.DataArray(
-        np.asarray(basin.is_inside(lon=longitude_2d, lat=latitude_2d), dtype=bool),
+        np.asarray(
+            basin.is_inside(lon=longitude_2d, lat=latitude_2d), dtype=bool
+        ),
         dims=("latitude", "longitude"),
         coords={
             "latitude": mask["latitude"],
@@ -257,7 +264,9 @@ def compute_cell_area(mask: xr.DataArray) -> xr.DataArray:
         ValueError: If the latitudes or the longitudes of `mask` are not
             strictly increasing (raised by `RegularGrid`).
     """
-    grid = RegularGrid(lat=mask["latitude"].values, lon=mask["longitude"].values)
+    grid = RegularGrid(
+        lat=mask["latitude"].values, lon=mask["longitude"].values
+    )
     cell_area = xr.DataArray(
         grid.area,
         dims=("latitude", "longitude"),
