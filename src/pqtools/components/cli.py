@@ -3,8 +3,13 @@ import math
 from datetime import datetime
 from pathlib import Path
 
+from pqtools.components.basin_data import SatelliteDatasetOptions
+from pqtools.components.data_retrievers import DataSource
+
 COMPUTE_TIMESERIES = "compute_timeseries"
 COMPUTE_COMPARISON_MAPS = "compute_comparison_maps"
+
+_DEFAULT_SATELLITE_OPTIONS = SatelliteDatasetOptions()
 
 
 def date_argument(value: str) -> datetime:
@@ -102,8 +107,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="the action to perform",
     )
 
+    # Options shared by all the actions that use the satellite data
+    satellite_options = argparse.ArgumentParser(add_help=False)
+    satellite_group = satellite_options.add_argument_group(
+        "satellite dataset options"
+    )
+    satellite_group.add_argument(
+        "--satellite-average-window",
+        type=non_negative_int_argument,
+        default=_DEFAULT_SATELLITE_OPTIONS.half_window_size,
+        required=False,
+        metavar="DAYS",
+        help="half-width, in days, of the centered moving average applied "
+        "to the satellite data to fill the cells left empty by clouds "
+        "or missing passes. The value of each day is the average of "
+        "the DAYS days before, the day itself and the DAYS days after "
+        "(i.e. over 2*DAYS+1 days; e.g. 3 means a 7-day window). "
+        "Use 0 to disable the average and keep the daily values "
+        "(default: %(default)s)",
+    )
+    satellite_group.add_argument(
+        "--satellite-max-qi",
+        type=non_negative_float_argument,
+        default=_DEFAULT_SATELLITE_OPTIONS.max_qi,
+        required=False,
+        metavar="QI",
+        help="threshold on the quality index (QI_CHL) of the satellite "
+        "data, i.e. the anomaly with respect to the climatology in "
+        "units of climatological standard deviations. The satellite "
+        "values with |QI_CHL| strictly greater than QI, and the ones "
+        "without a quality index, are removed before any other "
+        "processing. Use 0 to disable the filter "
+        "(default: %(default)s)",
+    )
+
     timeseries = subparsers.add_parser(
         COMPUTE_TIMESERIES,
+        parents=[satellite_options],
         help="compute the chlorophyll timeseries",
         description="Compute the chlorophyll timeseries.",
     )
@@ -121,36 +161,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     timeseries.add_argument(
-        "--satellite-average-window",
-        type=non_negative_int_argument,
-        default=3,
-        required=False,
-        metavar="DAYS",
-        help="half-width, in days, of the centered moving average applied "
-        "to the satellite data to fill the cells left empty by clouds "
-        "or missing passes. The value of each day is the average of "
-        "the DAYS days before, the day itself and the DAYS days after "
-        "(i.e. over 2*DAYS+1 days; e.g. 3 means a 7-day window). "
-        "Use 0 to disable the average and keep the daily values "
-        "(default: %(default)s)",
-    )
-
-    timeseries.add_argument(
-        "--satellite-max-qi",
-        type=non_negative_float_argument,
-        default=0.0,
-        required=False,
-        metavar="QI",
-        help="threshold on the quality index (QI_CHL) of the satellite "
-        "data, i.e. the anomaly with respect to the climatology in "
-        "units of climatological standard deviations. The satellite "
-        "values with |QI_CHL| strictly greater than QI, and the ones "
-        "without a quality index, are removed before any other "
-        "processing. Use 0 to disable the filter "
-        "(default: %(default)s)",
-    )
-
-    timeseries.add_argument(
         "-o",
         "--output-file",
         type=output_file_argument,
@@ -158,10 +168,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="path of the output file; its directory must already exist",
     )
 
-    subparsers.add_parser(
+    comparison_maps = subparsers.add_parser(
         COMPUTE_COMPARISON_MAPS,
+        parents=[satellite_options],
         help="compute the comparison maps",
         description="Compute the comparison maps.",
+    )
+    comparison_maps.add_argument(
+        "--evaluated-dataset",
+        type=DataSource,
+        choices=[DataSource.ANALYSIS, DataSource.REANALYSIS],
+        required=True,
+        metavar="{analysis,reanalysis}",
+        help="the model dataset to evaluate",
+    )
+    comparison_maps.add_argument(
+        "--reference-dataset",
+        type=DataSource,
+        choices=list(DataSource),
+        default=DataSource.SATELLITE,
+        required=False,
+        metavar="{" + ",".join(s.value for s in DataSource) + "}",
+        help="the dataset used as reference; it must be different from "
+        "--evaluated-dataset (default: %(default)s)",
+    )
+    comparison_maps.add_argument(
+        "--start-date",
+        type=date_argument,
+        required=True,
+        help="first day of the period, in the format YYYY-MM-DD (inclusive)",
+    )
+    comparison_maps.add_argument(
+        "--end-date",
+        type=date_argument,
+        required=True,
+        help="last day of the period, in the format YYYY-MM-DD (inclusive)",
+    )
+    comparison_maps.add_argument(
+        "-o",
+        "--output-file",
+        type=output_file_argument,
+        required=True,
+        help="path of the output file; its directory must already exist",
     )
 
     return parser
@@ -180,13 +228,18 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parser = build_parser()
     parsed = parser.parse_args(args)
 
-    if (
-        parsed.action == COMPUTE_TIMESERIES
-        and parsed.start_date > parsed.end_date
-    ):
+    if parsed.start_date > parsed.end_date:
         parser.error(
             f"--start-date ({parsed.start_date.date()}) must not be later "
             f"than --end-date ({parsed.end_date.date()})"
+        )
+
+    if (
+        parsed.action == COMPUTE_COMPARISON_MAPS
+        and parsed.evaluated_dataset is parsed.reference_dataset
+    ):
+        parser.error(
+            "--reference-dataset must be different from --evaluated-dataset"
         )
 
     return parsed

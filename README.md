@@ -14,8 +14,8 @@ All the data are daily and are read directly from the Copernicus Marine
 servers: there is no need to download any file in advance.
 
 At the moment, `pqtools` can compute the **daily timeseries** of the
-chlorophyll averaged over a basin, for each of the three sources. The
-computation of comparison maps is planned but not implemented yet.
+chlorophyll averaged over a basin, for each of the three sources, and the
+**comparison maps** between a model source and a reference one.
 
 
 ## Installation
@@ -24,18 +24,18 @@ computation of comparison maps is planned but not implemented yet.
 
 - Python 3.12 or later
 - [Poetry](https://python-poetry.org/) 2.x
-- A local copy of [bit.sea](https://github.com/inogs/bit.sea), which provides
-  the definitions of the basins and of the grids
+- Git, which is needed to download
+  [bit.sea](https://github.com/inogs/bit.sea), the library that provides the
+  definitions of the basins and of the grids
 - A (free) account of the Copernicus Marine Service
 
 ### Install the package
 
-`pqtools` depends on `bitsea`, which is installed from a local directory. The
-path of this directory is written in `pyproject.toml`
-(`bitsea @ file:///home/spiani/projects/bit.sea`): if your copy of bit.sea is
-somewhere else, update that line before installing.
+`pqtools` depends on `bitsea`, which is installed automatically from its
+[Git repository](https://github.com/inogs/bit.sea.git), at the commit recorded
+in `poetry.lock`. To move to the latest commit, run `poetry update bitsea`.
 
-Then, from the root of the repository:
+From the root of the repository:
 
 ```bash
 poetry install
@@ -76,7 +76,9 @@ The interface has two actions:
 
 - `compute_timeseries`: computes the daily timeseries of the chlorophyll on a
   basin and saves them in a netCDF file;
-- `compute_comparison_maps`: **not implemented yet**.
+- `compute_comparison_maps`: computes the daily maps of the difference between
+  a model source and a reference source, with their mean and root mean square,
+  and saves them in a netCDF file.
 
 ### `compute_timeseries`
 
@@ -121,6 +123,43 @@ of the requested period) and the following variables:
 The global attributes of the file record the basin and the options used for
 the satellite data. If a source has no data on some days of the period
 (e.g. the analysis before July 2024), its variables are NaN on those days.
+
+### `compute_comparison_maps`
+
+```bash
+poetry run pqtools compute_comparison_maps \
+    --evaluated-dataset analysis \
+    --start-date 2025-03-01 \
+    --end-date 2025-03-31 \
+    -o comparison_march_2025.nc
+```
+
+The options are the same as `compute_timeseries` (also here, the basin is fixed
+in the code), plus:
+
+| Option                | Required | Default     | Description |
+|-----------------------|----------|-------------|-------------|
+| `--evaluated-dataset` | yes      |             | Model source to evaluate (`analysis` or `reanalysis`) |
+| `--reference-dataset` | no       | `satellite` | Source used as reference; must be different from `--evaluated-dataset` |
+
+The options on the satellite data have no effect if the reference is not the
+satellite.
+
+#### Output
+
+The output file is a netCDF file, on the model grid, with the following
+variables:
+
+| Variable             | Dimensions                | Units  | Description |
+|----------------------|---------------------------|--------|-------------|
+| `difference`         | time, latitude, longitude | mg m-3 | Evaluated - reference, on the cells valid in both the sources (NaN elsewhere) |
+| `mean_difference`    | time                      | mg m-3 | Spatial mean of the differences (bias) |
+| `rms_difference`     | time                      | mg m-3 | Spatial root mean square of the differences (the bias is not removed) |
+| `reference_coverage` | time, latitude, longitude | 1      | Fraction (0 – 1) of the sea area of each cell covered by valid satellite data; only if the reference is the satellite |
+
+The global attributes of the file record the basin, the two datasets and, if
+the reference is the satellite, the options used for its data. The days without
+any valid cell (e.g. the ones available in only one of the two sources) are NaN.
 
 
 ## How the timeseries are computed
@@ -171,8 +210,35 @@ For each source, `compute_timeseries` performs the following steps.
    the ratio between the area of the cells with valid data and the area of
    the satellite mask.
 
-The model and the satellite data are **not regridded**: each source is
-averaged on its own grid and only the resulting timeseries are compared.
+For the timeseries, the model and the satellite data are **not regridded**:
+each source is averaged on its own grid and only the resulting timeseries are
+compared.
+
+
+## How the comparison maps are computed
+
+The data are downloaded, filtered, averaged in time and masked as for the
+timeseries (steps 1-4), with one exception: the satellite data are cut on a
+rectangle slightly larger than the bounding box of the basin, because the model
+cells on the border of the basin also cover satellite points outside of it.
+Then:
+
+1. **Regridding of the satellite data** (only if the reference is the
+   satellite). The satellite data are interpolated on the model grid with a
+   conservative regridding: the value of each model cell is the arithmetic mean
+   of the valid satellite values that overlap it, weighted with the area of the
+   overlap. The coverage of a cell is the fraction of its sea area (according
+   to the satellite mask) with valid data: the cells with a coverage lower than
+   75% are set to NaN. The coverage itself is saved in `reference_coverage`
+   also for these cells, while it is NaN on the model cells that are entirely
+   land for the satellite.
+
+2. **Difference.** For each day, the difference (evaluated - reference) is
+   computed on the cells valid in both the sources.
+
+3. **Statistics.** For each day, the mean and the root mean square of the
+   differences are computed on the valid cells, **weighting each cell with its
+   area**.
 
 
 ## Things to keep in mind
@@ -215,9 +281,12 @@ src/pqtools/
     ├── cli.py                     # Command line interface (argparse)
     ├── basins.py                  # Bounding boxes of the basins
     ├── data_retrievers.py         # Download and harmonisation of the data
+    ├── basin_data.py              # Masked data of the sources on a basin
     ├── satellite_processing.py    # Moving geometric mean of the satellite data
     ├── masks.py                   # Land/sea masks, basin masks and cell areas
-    └── compute_timeseries.py      # Computation of the timeseries
+    ├── regridding.py              # Interpolation on the model grid
+    ├── compute_timeseries.py      # Computation of the timeseries
+    └── compute_comparison_maps.py # Computation of the comparison maps
 ```
 
 The functions in these modules can also be used directly from Python, e.g.:
@@ -227,13 +296,13 @@ from datetime import datetime
 
 from bitsea.basins import Basin
 
-from pqtools.components.compute_timeseries import TimeseriesOptions
+from pqtools.components.basin_data import SatelliteDatasetOptions
 from pqtools.components.compute_timeseries import compute_timeseries
 
 timeseries = compute_timeseries(
     start_date=datetime(2025, 3, 1),
     end_date=datetime(2025, 3, 31),
     basin=Basin.load_from_uuid("adr1"),
-    options=TimeseriesOptions(half_satellite_window_size=3),
+    satellite_dataset_options=SatelliteDatasetOptions(half_window_size=3),
 )
 ```

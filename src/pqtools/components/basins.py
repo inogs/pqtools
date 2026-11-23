@@ -1,9 +1,12 @@
 import logging
 from collections import deque
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 from bitsea.basins import Basin
+from bitsea.basins.basin import SimplePolygonalBasin
+from bitsea.basins.region import Rectangle
 
 LOGGER = logging.getLogger(__name__)
 
@@ -12,6 +15,14 @@ MED_MINIMUM_LATITUDE = 30.1875
 MED_MAXIMUM_LATITUDE = 45.97916793823242
 MED_MINIMUM_LONGITUDE = -5.5
 MED_MAXIMUM_LONGITUDE = 36.29166793823242
+
+# How copernicusmarine selects the grid points of a bounding box:
+# * "inside": only the points inside the box;
+# * "outside": also the first point beyond each side of the box, so that the
+#   retrieved points always contain the whole box.
+# Data and masks downloaded on the same box must use the same method,
+# otherwise their grids would not be aligned
+CoordinatesSelectionMethod = Literal["inside", "outside"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,4 +170,41 @@ def basin_to_bounding_box(basin: Basin) -> BoundingBox:
         maximum_longitude=max_lon,
         minimum_latitude=min_lat,
         maximum_latitude=max_lat,
+    )
+
+
+def rectangle_around_basin(
+    basin: Basin, margin: float
+) -> SimplePolygonalBasin:
+    """Builds a rectangular basin that contains `basin` with some margin.
+
+    The rectangle is the bounding box of `basin` (see
+    `basin_to_bounding_box`) enlarged by `margin` degrees on each side.
+
+    Args:
+        basin: The basin to contain.
+        margin: The enlargement of each side of the bounding box, in
+            degrees; it must be greater or equal than 0.
+
+    Returns:
+        A `SimplePolygonalBasin` whose region is a `Rectangle`, so that it
+        can be used wherever a basin is expected.
+
+    Raises:
+        ValueError: If `margin` is negative or not finite.
+    """
+    if not np.isfinite(margin) or margin < 0:
+        raise ValueError(
+            f"margin must be a finite number greater or equal than 0; "
+            f"received {margin}"
+        )
+    bounding_box = basin_to_bounding_box(basin)
+    rectangle = Rectangle(
+        lonmin=bounding_box.minimum_longitude - margin,
+        lonmax=bounding_box.maximum_longitude + margin,
+        latmin=bounding_box.minimum_latitude - margin,
+        latmax=bounding_box.maximum_latitude + margin,
+    )
+    return SimplePolygonalBasin(
+        name=f"{basin.name}_rectangle", region=rectangle
     )

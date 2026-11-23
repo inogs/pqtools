@@ -8,6 +8,7 @@ from bitsea.basins import Basin
 from bitsea.commons.grid import RegularGrid
 
 from pqtools.components.basins import BoundingBox
+from pqtools.components.basins import CoordinatesSelectionMethod
 
 ANALYSIS_DATASET = "cmems_mod_med_bgc_anfc_4.2km_static"
 REANALYSIS_DATASET = "cmems_mod_med_bgc_my_4.2km_static"
@@ -73,7 +74,10 @@ def get_model_mask(bounding_box: BoundingBox) -> xr.DataArray:
     return mask
 
 
-def get_satellite_mask(bounding_box: BoundingBox) -> xr.DataArray:
+def get_satellite_mask(
+    bounding_box: BoundingBox,
+    coordinates_selection_method: CoordinatesSelectionMethod = "inside",
+) -> xr.DataArray:
     """Computes the land/sea mask of the satellite chlorophyll product.
 
     The satellite L3 product has no static mask, and its NaNs cannot be used
@@ -102,6 +106,10 @@ def get_satellite_mask(bounding_box: BoundingBox) -> xr.DataArray:
     Args:
         bounding_box: The area where the mask is computed. It is clipped to
             the Mediterranean Sea, as for the model mask.
+        coordinates_selection_method: How the points of `bounding_box` are
+            selected (see `CoordinatesSelectionMethod`). It must be the same
+            used to download the satellite data, so that the mask is on
+            their same grid.
 
     Returns:
         A boolean `xarray.DataArray` named ``"mask"`` with dimensions
@@ -117,6 +125,7 @@ def get_satellite_mask(bounding_box: BoundingBox) -> xr.DataArray:
         start_datetime=SATELLITE_MASK_DATE,
         end_datetime=SATELLITE_MASK_DATE,
         **bounding_box.cut_on_mediterranean_sea().to_dict(),
+        coordinates_selection_method=coordinates_selection_method,
     )
     chl = l4_data[SATELLITE_L4_VARIABLE].isel(time=0, drop=True)
 

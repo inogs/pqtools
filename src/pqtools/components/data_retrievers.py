@@ -8,12 +8,17 @@ import numpy as np
 import xarray as xr
 
 from pqtools.components.basins import BoundingBox
+from pqtools.components.basins import CoordinatesSelectionMethod
 
 
 class DataSource(Enum):
     REANALYSIS = "reanalysis"
     ANALYSIS = "analysis"
     SATELLITE = "satellite"
+
+    def __str__(self) -> str:
+        # Used by argparse in the help and in the error messages
+        return self.value
 
 
 DATASETS: MappingProxyType[DataSource, "str"] = MappingProxyType(
@@ -108,6 +113,7 @@ def download_data(
     region: BoundingBox,
     data_source: DataSource,
     satellite_max_qi: float = 0.0,
+    coordinates_selection_method: CoordinatesSelectionMethod = "inside",
 ) -> xr.DataArray:
     """Retrieves the surface chlorophyll-a concentration from Copernicus Marine.
 
@@ -176,6 +182,9 @@ def download_data(
             the quality index and the values without it are kept.
             It must not be negative. It is ignored if `data_source` is not
             `DataSource.SATELLITE`.
+        coordinates_selection_method: How the points of `region` are
+            selected (see `CoordinatesSelectionMethod`). The masks used with
+            these data must be downloaded with the same method.
 
     Returns:
         A lazy `xarray.DataArray` named ``"chl"`` with dimensions
@@ -225,6 +234,7 @@ def download_data(
         start_datetime=_as_utc(start_date),
         end_datetime=_as_utc(end_date),
         **region.cut_on_mediterranean_sea().to_dict(),
+        coordinates_selection_method=coordinates_selection_method,
     )
 
     # Only the surface layer of the model datasets is kept. This must be

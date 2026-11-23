@@ -1,38 +1,12 @@
-from dataclasses import dataclass
-from datetime import UTC
 from datetime import datetime
-from datetime import timedelta
 
-import numpy as np
 import xarray as xr
 from bitsea.basins import Basin
 
-from pqtools.components.basins import basin_to_bounding_box
+from pqtools.components.basin_data import SatelliteDatasetOptions
+from pqtools.components.basin_data import download_basin_data
 from pqtools.components.data_retrievers import DataSource
-from pqtools.components.data_retrievers import download_data
-from pqtools.components.masks import apply_mask
 from pqtools.components.masks import compute_cell_area
-from pqtools.components.masks import cut_mask_on_basin
-from pqtools.components.masks import get_model_mask
-from pqtools.components.masks import get_satellite_mask
-from pqtools.components.satellite_processing import log_moving_average
-
-
-@dataclass(frozen=True, slots=True)
-class TimeseriesOptions:
-    half_satellite_window_size: int = 0
-    satellite_max_qi: float = 0.0
-
-
-def _as_naive_utc(date: datetime) -> np.datetime64:
-    """Converts `date` to a numpy datetime64 in UTC, as the dataset times.
-
-    Naive datetimes are interpreted as UTC.
-    """
-    if date.tzinfo is not None:
-        date = date.astimezone(UTC).replace(tzinfo=None)
-    return np.datetime64(date)
-
 
 SATELLITE_COVERAGE_VARIABLE = "satellite_coverage"
 
@@ -99,7 +73,7 @@ def compute_timeseries(
     start_date: datetime,
     end_date: datetime,
     basin: Basin,
-    options: TimeseriesOptions | None = None,
+    satellite_dataset_options: SatelliteDatasetOptions | None = None,
 ) -> xr.Dataset:
     """Computes the daily timeseries of the chlorophyll on a basin.
 
@@ -112,17 +86,17 @@ def compute_timeseries(
     are ignored.
 
     Before computing the statistics, the satellite data are filtered on
-    their quality index (if `options.satellite_max_qi` is greater than 0)
-    and averaged in time with a moving geometric mean (if
-    `options.half_satellite_window_size` is greater than 0).
+    their quality index (if `satellite_dataset_options.max_qi` is greater
+    than 0) and averaged in time with a moving geometric mean (if
+    `satellite_dataset_options.half_window_size` is greater than 0).
 
     Args:
         start_date: First day of the timeseries (inclusive).
         end_date: Last day of the timeseries (inclusive).
         basin: The basin on which the statistics are computed.
-        options: Options for the processing of the satellite data. If None,
-            the default options are used (no filter on the quality index
-            and no moving average).
+        satellite_dataset_options: Options for the processing of the
+            satellite data. If None, the default options are used (no
+            filter on the quality index and a moving average over 7 days).
 
     Returns:
         A `xarray.Dataset` with dimension ``time`` and the variables:
@@ -138,68 +112,31 @@ def compute_timeseries(
         The days in which a source has no data are NaN for that source. The
         values are computed (not lazy).
     """
-    if options is None:
-        options = TimeseriesOptions()
+    if satellite_dataset_options is None:
+        satellite_dataset_options = SatelliteDatasetOptions()
 
-    bounding_box = basin_to_bounding_box(basin)
-
-    datasets = {}
-    for data_source in DataSource:
-        if data_source is DataSource.SATELLITE:
-            # The satellite data are downloaded on a period extended by the
-            # half-width of the moving average on both sides, so that every
-            # day in [start_date, end_date] has its full window
-            window_extension = timedelta(
-                days=options.half_satellite_window_size
-            )
-            satellite_data = download_data(
-                start_date=start_date - window_extension,
-                end_date=end_date + window_extension,
-                region=bounding_box,
-                data_source=data_source,
-                satellite_max_qi=options.satellite_max_qi,
-            )
-            datasets[data_source] = log_moving_average(
-                satellite_data,
-                half_window=options.half_satellite_window_size,
-            ).sel(
-                time=slice(_as_naive_utc(start_date), _as_naive_utc(end_date))
-            )
-        else:
-            datasets[data_source] = download_data(
-                start_date=start_date,
-                end_date=end_date,
-                region=bounding_box,
-                data_source=data_source,
-            )
-
-    regional_model_mask = get_model_mask(bounding_box=bounding_box)
-    regional_satellite_mask = get_satellite_mask(bounding_box=bounding_box)
-
-    model_mask = cut_mask_on_basin(mask=regional_model_mask, basin=basin)
-    satellite_mask = cut_mask_on_basin(
-        mask=regional_satellite_mask, basin=basin
+    basin_data = download_basin_data(
+        data_sources=DataSource,
+        start_date=start_date,
+        end_date=end_date,
+        basin=basin,
+        satellite_dataset_options=satellite_dataset_options,
     )
 
-    masks = {
-        DataSource.ANALYSIS: model_mask,
-        DataSource.REANALYSIS: model_mask,
-        DataSource.SATELLITE: satellite_mask,
-    }
-
-    # The values outside the mask of their source (land or outside the
-    # basin) are set to NaN
     datasets = {
-        data_source: apply_mask(data, masks[data_source])
-        for data_source, data in datasets.items()
+        data_source: source_data.data
+        for data_source, source_data in basin_data.items()
     }
 
-    model_cell_area = compute_cell_area(model_mask)
-    cell_areas = {
-        DataSource.ANALYSIS: model_cell_area,
-        DataSource.REANALYSIS: model_cell_area,
-        DataSource.SATELLITE: compute_cell_area(satellite_mask),
-    }
+    # The area is computed only once for each mask (the model sources
+    # share the same one)
+    areas_by_mask = {}
+    cell_areas = {}
+    for data_source, source_data in basin_data.items():
+        mask_id = id(source_data.mask)
+        if mask_id not in areas_by_mask:
+            areas_by_mask[mask_id] = compute_cell_area(source_data.mask)
+        cell_areas[data_source] = areas_by_mask[mask_id]
 
     variables = {}
     for data_source, data in datasets.items():
@@ -228,8 +165,10 @@ def compute_timeseries(
     # data on some days, its variables are NaN on those days
     timeseries = xr.Dataset(variables).assign_attrs(
         basin=basin.get_uuid(),
-        satellite_moving_average_half_window=options.half_satellite_window_size,
-        satellite_max_qi=options.satellite_max_qi,
+        satellite_moving_average_half_window=(
+            satellite_dataset_options.half_window_size
+        ),
+        satellite_max_qi=satellite_dataset_options.max_qi,
     )
 
     # All the variables are computed together, so that the data shared
