@@ -53,6 +53,11 @@ SATELLITE_VALID_MAX = 100.0
 # deviations
 SATELLITE_QI_VARIABLE = "QI_CHL"
 
+# Maximum number of remote (zarr) chunks in each dask chunk. The default of
+# copernicusmarine (up to 100) gives dask chunks of hundreds of MB on large
+# domains, and therefore a high memory usage
+CHUNK_SIZE_LIMIT = 20
+
 # Units of the data returned by `download_data`, whatever the source
 OUTPUT_UNITS = "mg m-3"
 
@@ -235,6 +240,7 @@ def download_data(
         end_datetime=_as_utc(end_date),
         **region.cut_on_mediterranean_sea().to_dict(),
         coordinates_selection_method=coordinates_selection_method,
+        chunk_size_limit=CHUNK_SIZE_LIMIT,
     )
 
     # Only the surface layer of the model datasets is kept. This must be
