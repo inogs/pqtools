@@ -80,10 +80,48 @@ The interface has two actions:
   a model source and a reference source, with their mean and root mean square,
   and saves them in a netCDF file.
 
+### The basin
+
+Both the actions require the option `--basin`, which can be:
+
+- `bitsea:UUID`, where `UUID` is the uuid of a basin of bitsea: the name of a
+  basin of the default module `V2` (e.g. `bitsea:adr1`) or `..MODULE.NAME` for
+  the other modules (e.g. `bitsea:..V0.adn`);
+- the path of a YAML file that describes a basin, whose shape can be a polygon:
+
+  ```yaml
+  name: my_polygon
+  extended_name: My favourite basin  # optional
+  polygon:
+    - {longitude: 12.0, latitude: 44.0}
+    - {longitude: 13.5, latitude: 44.0}
+    - {longitude: 13.0, latitude: 45.5}
+  ```
+
+  or a rectangle with the sides parallel to the axes of the grid:
+
+  ```yaml
+  name: my_rectangle
+  rectangle:
+    minimum_longitude: 12.0
+    maximum_longitude: 13.5
+    minimum_latitude: 44.0
+    maximum_latitude: 45.5
+  ```
+
+  The name cannot contain dots or commas. A polygon requires at least 3
+  vertices and is closed automatically; the border of a rectangle is part of the
+  basin. If the basin is a rectangle, prefer `rectangle`, which is simpler to
+  compute.
+
+Only basins made of polygons or rectangles (or unions of them) that overlap the Mediterranean Sea
+are supported.
+
 ### `compute_timeseries`
 
 ```bash
 poetry run pqtools compute_timeseries \
+    --basin bitsea:adr1 \
     --start-date 2025-03-01 \
     --end-date 2025-03-31 \
     --satellite-average-window 3 \
@@ -93,6 +131,7 @@ poetry run pqtools compute_timeseries \
 
 | Option                              | Required | Default | Description |
 |-------------------------------------|----------|---------|-------------|
+| `--basin BASIN`                     | yes      |         | Basin on which the statistics are computed (see [The basin](#the-basin)) |
 | `--start-date`                      | yes      |         | First day of the period (`YYYY-MM-DD`, inclusive) |
 | `--end-date`                        | yes      |         | Last day of the period (`YYYY-MM-DD`, inclusive); must not be earlier than `--start-date` |
 | `-o`, `--output-file`               | yes      |         | Output netCDF file; its directory must already exist |
@@ -101,9 +140,6 @@ poetry run pqtools compute_timeseries \
 
 Dates without a time zone are interpreted as UTC, which is the time
 reference of the datasets.
-
-> **Note:** the basin is currently fixed in the code (`adr1`, see
-> `src/pqtools/__main__.py`) and cannot be chosen from the command line.
 
 #### Output
 
@@ -128,14 +164,14 @@ the satellite data. If a source has no data on some days of the period
 
 ```bash
 poetry run pqtools compute_comparison_maps \
+    --basin bitsea:adr1 \
     --evaluated-dataset analysis \
     --start-date 2025-03-01 \
     --end-date 2025-03-31 \
     -o comparison_march_2025.nc
 ```
 
-The options are the same as `compute_timeseries` (also here, the basin is fixed
-in the code), plus:
+The options are the same as `compute_timeseries`, plus:
 
 | Option                | Required | Default     | Description |
 |-----------------------|----------|-------------|-------------|
@@ -282,6 +318,7 @@ src/pqtools/
     ├── cli.py                     # Command line interface (argparse)
     ├── basins.py                  # Bounding boxes of the basins
     ├── data_retrievers.py         # Download and harmonisation of the data
+    ├── basin_loader.py            # Loading of the basins (bitsea or YAML)
     ├── basin_data.py              # Masked data of the sources on a basin
     ├── satellite_processing.py    # Moving geometric mean of the satellite data
     ├── masks.py                   # Land/sea masks, basin masks and cell areas

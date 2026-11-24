@@ -3,7 +3,11 @@ import math
 from datetime import datetime
 from pathlib import Path
 
+from bitsea.basins import Basin
+
 from pqtools.components.basin_data import SatelliteDatasetOptions
+from pqtools.components.basin_loader import InvalidBasinError
+from pqtools.components.basin_loader import load_basin
 from pqtools.components.data_retrievers import DataSource
 
 COMPUTE_TIMESERIES = "compute_timeseries"
@@ -94,6 +98,18 @@ def non_negative_float_argument(value: str) -> float:
     return number
 
 
+def basin_argument(value: str) -> Basin:
+    """Parses a command line argument as a basin (see `load_basin`).
+
+    Raises:
+        argparse.ArgumentTypeError: If the basin cannot be loaded.
+    """
+    try:
+        return load_basin(value)
+    except InvalidBasinError as error:
+        raise argparse.ArgumentTypeError(str(error))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pqtools",
@@ -105,6 +121,18 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         metavar="ACTION",
         help="the action to perform",
+    )
+
+    # Options shared by all the actions
+    basin_options = argparse.ArgumentParser(add_help=False)
+    basin_options.add_argument(
+        "--basin",
+        type=basin_argument,
+        required=True,
+        metavar="BASIN",
+        help="the basin on which the statistics are computed: either "
+        "bitsea:UUID, where UUID is the uuid of a basin of bitsea (e.g. "
+        "bitsea:adr1), or the path of a YAML file that describes the basin",
     )
 
     # Options shared by all the actions that use the satellite data
@@ -143,7 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     timeseries = subparsers.add_parser(
         COMPUTE_TIMESERIES,
-        parents=[satellite_options],
+        parents=[basin_options, satellite_options],
         help="compute the chlorophyll timeseries",
         description="Compute the chlorophyll timeseries.",
     )
@@ -170,7 +198,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     comparison_maps = subparsers.add_parser(
         COMPUTE_COMPARISON_MAPS,
-        parents=[satellite_options],
+        parents=[basin_options, satellite_options],
         help="compute the comparison maps",
         description="Compute the comparison maps.",
     )

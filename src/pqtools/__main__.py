@@ -1,13 +1,9 @@
 import logging
 import time
 
-from bitsea.basins import Basin
-
 from pqtools.components.cli import COMPUTE_COMPARISON_MAPS
 from pqtools.components.cli import COMPUTE_TIMESERIES
 from pqtools.components.cli import parse_args
-
-BASIN = Basin.load_from_uuid("adr1")
 
 
 def configure_logger(logger: logging.Logger | None = None, level=logging.INFO):
@@ -55,7 +51,7 @@ def main() -> int:
         timeseries = compute_timeseries(
             start_date=args.start_date,
             end_date=args.end_date,
-            basin=BASIN,
+            basin=args.basin,
             satellite_dataset_options=satellite_dataset_options,
         )
 
@@ -71,7 +67,7 @@ def main() -> int:
             reference_dataset=args.reference_dataset,
             start_date=args.start_date,
             end_date=args.end_date,
-            basin=BASIN,
+            basin=args.basin,
             satellite_dataset_options=satellite_dataset_options,
         )
 

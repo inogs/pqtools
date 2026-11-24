@@ -14,7 +14,8 @@ dependencies = [
     "xarray (>=2026.9.0,<2027.0.0)",
     "pandas (>=3.1.1,<4.0.0)",
     "numpy (>=2.5.5,<3.0.0)",
-    "xarray-regrid (>=0.4.2,<0.5.0)"
+    "xarray-regrid (>=0.4.2,<0.5.0)",
+    "pyyaml (>=6.0.3,<7.0.0)"
 ]
 
 [project.scripts]
@@ -30,7 +31,8 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "pre-commit (>=4.7.0,<5.0.0)",
-    "deptry (>=0.25.1,<0.26.0)"
+    "deptry (>=0.25.1,<0.26.0)",
+    "pytest (>=9.2.0,<10.0.0)"
 ]
 
 
