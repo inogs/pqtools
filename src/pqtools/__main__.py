@@ -69,6 +69,7 @@ def main() -> int:
             end_date=args.end_date,
             basin=args.basin,
             satellite_dataset_options=satellite_dataset_options,
+            satellite_min_coverage=args.satellite_min_coverage,
         )
 
         write_netcdf(comparison_maps, args.output_file)

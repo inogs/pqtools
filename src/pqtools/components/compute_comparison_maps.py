@@ -10,6 +10,7 @@ from pqtools.components.basin_data import download_basin_data
 from pqtools.components.basins import rectangle_around_basin
 from pqtools.components.data_retrievers import DataSource
 from pqtools.components.masks import compute_cell_area
+from pqtools.components.regridding import DEFAULT_MIN_SATELLITE_COVERAGE
 from pqtools.components.regridding import SPATIAL_DIMS
 from pqtools.components.regridding import regrid_on_mask_grid
 
@@ -36,6 +37,7 @@ def compute_comparison_maps(
     end_date: datetime,
     basin: Basin,
     satellite_dataset_options: SatelliteDatasetOptions | None = None,
+    satellite_min_coverage: float = DEFAULT_MIN_SATELLITE_COVERAGE,
 ) -> xr.Dataset:
     """Computes the maps comparing a model dataset with a reference dataset.
 
@@ -60,6 +62,10 @@ def compute_comparison_maps(
             ``DataSource.SATELLITE``. If None, the default options are used
             (no filter on the quality index and a moving average over 7
             days).
+        satellite_min_coverage: The minimum fraction, between 0 and 1, of
+            the sea area of a model cell that must be covered by valid
+            satellite data; the other cells are set to NaN. It is used only
+            if `reference_dataset` is ``DataSource.SATELLITE``.
 
     Returns:
         A `xarray.Dataset` with the variables (in mg m-3, except the
@@ -85,8 +91,9 @@ def compute_comparison_maps(
 
     Raises:
         ValueError: If `evaluated_dataset` is not a model product, if
-            `reference_dataset` is the same as `evaluated_dataset` or if
-            `start_date` is later than `end_date`.
+            `reference_dataset` is the same as `evaluated_dataset`, if
+            `start_date` is later than `end_date` or if
+            `satellite_min_coverage` is not between 0 and 1.
     """
     if evaluated_dataset not in MODEL_SOURCES:
         raise ValueError(
@@ -103,6 +110,12 @@ def compute_comparison_maps(
         raise ValueError(
             f"start_date ({start_date}) must not be later than end_date "
             f"({end_date})"
+        )
+
+    if not 0.0 <= satellite_min_coverage <= 1.0:
+        raise ValueError(
+            f"satellite_min_coverage must be between 0 and 1; received "
+            f"{satellite_min_coverage}"
         )
 
     if satellite_dataset_options is None:
@@ -131,6 +144,7 @@ def compute_comparison_maps(
             data=satellite.data,
             data_mask=satellite.mask,
             target_mask=basin_data[evaluated_dataset].mask,
+            min_coverage=satellite_min_coverage,
         )
         reference = regridded.data
         reference_coverage = regridded.coverage
@@ -182,6 +196,7 @@ def compute_comparison_maps(
             satellite_dataset_options.half_window_size
         )
         attrs["satellite_max_qi"] = satellite_dataset_options.max_qi
+        attrs["satellite_min_coverage"] = satellite_min_coverage
 
     comparison_maps = xr.Dataset(
         {

@@ -173,10 +173,11 @@ poetry run pqtools compute_comparison_maps \
 
 The options are the same as `compute_timeseries`, plus:
 
-| Option                | Required | Default     | Description |
-|-----------------------|----------|-------------|-------------|
-| `--evaluated-dataset` | yes      |             | Model source to evaluate (`analysis` or `reanalysis`) |
-| `--reference-dataset` | no       | `satellite` | Source used as reference; must be different from `--evaluated-dataset` |
+| Option                              | Required | Default     | Description |
+|-------------------------------------|----------|-------------|-------------|
+| `--evaluated-dataset`               | yes      |             | Model source to evaluate (`analysis` or `reanalysis`) |
+| `--reference-dataset`               | no       | `satellite` | Source used as reference; must be different from `--evaluated-dataset` |
+| `--satellite-min-coverage FRACTION` | no       | 0.75        | Minimum fraction (0 – 1) of the sea area of a model cell that must be covered by valid satellite data; `0` keeps all the cells with at least one valid value |
 
 The options on the satellite data have no effect if the reference is not the
 satellite.
@@ -264,10 +265,10 @@ Then:
    conservative regridding: the value of each model cell is the arithmetic mean
    of the valid satellite values that overlap it, weighted with the area of the
    overlap. The coverage of a cell is the fraction of its sea area (according
-   to the satellite mask) with valid data: the cells with a coverage lower than
-   75% are set to NaN. The coverage itself is saved in `reference_coverage`
-   also for these cells, while it is NaN on the model cells that are entirely
-   land for the satellite.
+   to the satellite mask) with valid data: the cells with a coverage lower
+   than `--satellite-min-coverage` (by default 0.75, i.e. 75%) are set to NaN.
+   The coverage itself is saved in `reference_coverage` also for these cells,
+   while it is NaN on the model cells that are entirely land for the satellite.
 
 2. **Difference.** For each day, the difference (evaluated - reference) is
    computed on the cells valid in both the sources.

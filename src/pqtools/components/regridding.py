@@ -5,10 +5,15 @@ import xarray_regrid  # noqa: F401 (registers the `regrid` accessor of xarray)
 
 from pqtools.components.masks import _check_alignment
 
-# Minimum fraction of the sea area of a model cell (according to the
+# Default minimum fraction of the sea area of a model cell (according to the
 # satellite mask) that must be covered by valid satellite data for the cell
 # to receive a value; the other cells are set to NaN
-MIN_SATELLITE_COVERAGE = 0.75
+DEFAULT_MIN_SATELLITE_COVERAGE = 0.75
+
+# Tolerance on the comparison of the coverage with its minimum: the coverage
+# is computed in float32 and, because of the rounding errors, a completely
+# covered cell can have a coverage slightly lower than 1
+COVERAGE_TOLERANCE = 1e-6
 
 SPATIAL_DIMS = ("latitude", "longitude")
 
@@ -48,7 +53,7 @@ def regrid_on_mask_grid(
     data: xr.DataArray,
     data_mask: xr.DataArray,
     target_mask: xr.DataArray,
-    min_coverage: float = MIN_SATELLITE_COVERAGE,
+    min_coverage: float = DEFAULT_MIN_SATELLITE_COVERAGE,
 ) -> RegriddedData:
     """Interpolates the chlorophyll from a fine grid to the grid of a mask.
 
@@ -73,7 +78,9 @@ def regrid_on_mask_grid(
             fine grid should cover all its True cells: the parts of the
             cells that are not covered are ignored.
         min_coverage: The minimum coverage, between 0 and 1, required to
-            assign a value to a cell.
+            assign a value to a cell (with a tolerance of
+            `COVERAGE_TOLERANCE`). With 0, the cells with at least one
+            valid value are kept.
 
     Returns:
         The interpolated data and their coverage, on the grid of
@@ -117,7 +124,7 @@ def regrid_on_mask_grid(
         valid_fraction > 0
     )
 
-    regridded = mean.where(coverage >= min_coverage)
+    regridded = mean.where(coverage >= min_coverage - COVERAGE_TOLERANCE)
 
     regridded = regridded.where(target_mask).assign_attrs(data.attrs)
     regridded.name = data.name

@@ -9,6 +9,7 @@ from pqtools.components.basin_data import SatelliteDatasetOptions
 from pqtools.components.basin_loader import InvalidBasinError
 from pqtools.components.basin_loader import load_basin
 from pqtools.components.data_retrievers import DataSource
+from pqtools.components.regridding import DEFAULT_MIN_SATELLITE_COVERAGE
 
 COMPUTE_TIMESERIES = "compute_timeseries"
 COMPUTE_COMPARISON_MAPS = "compute_comparison_maps"
@@ -98,6 +99,21 @@ def non_negative_float_argument(value: str) -> float:
     return number
 
 
+def fraction_argument(value: str) -> float:
+    """Parses a command line argument as a number between 0 and 1.
+
+    Raises:
+        argparse.ArgumentTypeError: If `value` is not a number or if it is
+            not between 0 and 1.
+    """
+    number = non_negative_float_argument(value)
+    if number > 1:
+        raise argparse.ArgumentTypeError(
+            f"the value must be between 0 and 1; received {number}"
+        )
+    return number
+
+
 def basin_argument(value: str) -> Basin:
     """Parses a command line argument as a basin (see `load_basin`).
 
@@ -169,6 +185,25 @@ def build_parser() -> argparse.ArgumentParser:
         "(default: %(default)s)",
     )
 
+    # Options for the satellite data when they are interpolated on the model
+    # grid. The group has the same title as the previous one: argparse merges
+    # them in the actions that use both the parsers
+    regridding_options = argparse.ArgumentParser(add_help=False)
+    regridding_options.add_argument_group(
+        "satellite dataset options"
+    ).add_argument(
+        "--satellite-min-coverage",
+        type=fraction_argument,
+        default=DEFAULT_MIN_SATELLITE_COVERAGE,
+        required=False,
+        metavar="FRACTION",
+        help="minimum fraction (between 0 and 1) of the sea area of a model "
+        "cell that must be covered by valid satellite data; the cells with "
+        "a lower coverage are ignored. Use 0 to keep all the cells with at "
+        "least one valid value. It has no effect if the reference dataset "
+        "is not the satellite (default: %(default)s)",
+    )
+
     timeseries = subparsers.add_parser(
         COMPUTE_TIMESERIES,
         parents=[basin_options, satellite_options],
@@ -198,7 +233,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     comparison_maps = subparsers.add_parser(
         COMPUTE_COMPARISON_MAPS,
-        parents=[basin_options, satellite_options],
+        parents=[basin_options, satellite_options, regridding_options],
         help="compute the comparison maps",
         description="Compute the comparison maps.",
     )
