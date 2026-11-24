@@ -42,6 +42,7 @@ def main() -> int:
     args = parse_args()
 
     from pqtools.components.basin_data import SatelliteDatasetOptions
+    from pqtools.components.output import write_netcdf
 
     satellite_dataset_options = SatelliteDatasetOptions(
         half_window_size=args.satellite_average_window,
@@ -58,7 +59,7 @@ def main() -> int:
             satellite_dataset_options=satellite_dataset_options,
         )
 
-        timeseries.to_netcdf(args.output_file)
+        write_netcdf(timeseries, args.output_file)
 
     elif args.action == COMPUTE_COMPARISON_MAPS:
         from pqtools.components.compute_comparison_maps import (
@@ -74,7 +75,7 @@ def main() -> int:
             satellite_dataset_options=satellite_dataset_options,
         )
 
-        comparison_maps.to_netcdf(args.output_file)
+        write_netcdf(comparison_maps, args.output_file)
 
     else:
         raise ValueError(f"Unexpected action: {args.action}")

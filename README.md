@@ -261,6 +261,7 @@ Then:
 - **Precision.** All the computations are done in single precision
   (`float32`), which is more than enough for these data and halves the
   memory usage.
+- **Compression.** The maps are saved with a lossless zlib compression.
 - **Dataset versions.** The Copernicus Marine Service periodically retires
   old versions of its datasets (`copernicusmarine` prints a warning when a
   version is going to be retired). If a dataset stops working, check the
@@ -285,6 +286,7 @@ src/pqtools/
     ├── satellite_processing.py    # Moving geometric mean of the satellite data
     ├── masks.py                   # Land/sea masks, basin masks and cell areas
     ├── regridding.py              # Interpolation on the model grid
+    ├── output.py                 # Writing of the (compressed) netCDF files
     ├── compute_timeseries.py      # Computation of the timeseries
     └── compute_comparison_maps.py # Computation of the comparison maps
 ```
