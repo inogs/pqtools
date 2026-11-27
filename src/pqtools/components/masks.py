@@ -9,6 +9,7 @@ from bitsea.commons.grid import RegularGrid
 
 from pqtools.components.basins import BoundingBox
 from pqtools.components.basins import CoordinatesSelectionMethod
+from pqtools.components.dataset_versions import get_dataset_version
 
 ANALYSIS_DATASET = "cmems_mod_med_bgc_anfc_4.2km_static"
 REANALYSIS_DATASET = "cmems_mod_med_bgc_my_4.2km_static"
@@ -49,6 +50,7 @@ def get_model_mask(bounding_box: BoundingBox) -> xr.DataArray:
     for ds_name in (ANALYSIS_DATASET, REANALYSIS_DATASET):
         mask_data = copernicusmarine.open_dataset(
             dataset_id=ds_name,
+            dataset_version=get_dataset_version(ds_name),
             variables=[
                 "mask",
             ],
@@ -121,6 +123,7 @@ def get_satellite_mask(
     """
     l4_data = copernicusmarine.open_dataset(
         dataset_id=SATELLITE_L4_DATASET,
+        dataset_version=get_dataset_version(SATELLITE_L4_DATASET),
         variables=[SATELLITE_L4_VARIABLE],
         start_datetime=SATELLITE_MASK_DATE,
         end_datetime=SATELLITE_MASK_DATE,

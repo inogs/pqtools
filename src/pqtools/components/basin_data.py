@@ -10,8 +10,12 @@ from bitsea.basins import Basin
 
 from pqtools.components.basins import CoordinatesSelectionMethod
 from pqtools.components.basins import basin_to_bounding_box
+from pqtools.components.data_retrievers import DATASETS
 from pqtools.components.data_retrievers import DataSource
 from pqtools.components.data_retrievers import download_data
+from pqtools.components.masks import ANALYSIS_DATASET
+from pqtools.components.masks import REANALYSIS_DATASET
+from pqtools.components.masks import SATELLITE_L4_DATASET
 from pqtools.components.masks import apply_mask
 from pqtools.components.masks import cut_mask_on_basin
 from pqtools.components.masks import get_model_mask
@@ -86,6 +90,30 @@ def _download_satellite_data(
     return log_moving_average(
         satellite_data, half_window=options.half_window_size
     ).sel(time=slice(as_naive_utc(start_date), as_naive_utc(end_date)))
+
+
+def source_dataset_ids(data_sources: Iterable[DataSource]) -> list[str]:
+    """Returns the ids of the datasets read by `download_basin_data`.
+
+    For each source, these are the dataset of its data and the datasets used
+    to build its mask: the static datasets of both the models for the model
+    sources, the L4 product for the satellite.
+
+    Args:
+        data_sources: The sources passed to `download_basin_data`.
+
+    Returns:
+        The ids of the datasets, without duplicates, in the order of
+        `data_sources`.
+    """
+    dataset_ids = []
+    for data_source in data_sources:
+        dataset_ids.append(DATASETS[data_source])
+        if data_source in MODEL_SOURCES:
+            dataset_ids.extend((ANALYSIS_DATASET, REANALYSIS_DATASET))
+        else:
+            dataset_ids.append(SATELLITE_L4_DATASET)
+    return list(dict.fromkeys(dataset_ids))
 
 
 def download_basin_data(

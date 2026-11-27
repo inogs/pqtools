@@ -5,7 +5,9 @@ from bitsea.basins import Basin
 
 from pqtools.components.basin_data import SatelliteDatasetOptions
 from pqtools.components.basin_data import download_basin_data
+from pqtools.components.basin_data import source_dataset_ids
 from pqtools.components.data_retrievers import DataSource
+from pqtools.components.dataset_versions import describe_dataset_versions
 from pqtools.components.masks import compute_cell_area
 
 SATELLITE_COVERAGE_VARIABLE = "satellite_coverage"
@@ -165,6 +167,9 @@ def compute_timeseries(
     # data on some days, its variables are NaN on those days
     timeseries = xr.Dataset(variables).assign_attrs(
         basin=basin.get_uuid(),
+        source_datasets=describe_dataset_versions(
+            source_dataset_ids(DataSource)
+        ),
         satellite_moving_average_half_window=(
             satellite_dataset_options.half_window_size
         ),

@@ -7,8 +7,10 @@ from bitsea.basins import Basin
 from pqtools.components.basin_data import MODEL_SOURCES
 from pqtools.components.basin_data import SatelliteDatasetOptions
 from pqtools.components.basin_data import download_basin_data
+from pqtools.components.basin_data import source_dataset_ids
 from pqtools.components.basins import rectangle_around_basin
 from pqtools.components.data_retrievers import DataSource
+from pqtools.components.dataset_versions import describe_dataset_versions
 from pqtools.components.masks import compute_cell_area
 from pqtools.components.regridding import DEFAULT_MIN_SATELLITE_COVERAGE
 from pqtools.components.regridding import SPATIAL_DIMS
@@ -190,6 +192,9 @@ def compute_comparison_maps(
         "basin": basin.get_uuid(),
         "evaluated_dataset": evaluated_dataset.value,
         "reference_dataset": reference_dataset.value,
+        "source_datasets": describe_dataset_versions(
+            source_dataset_ids((evaluated_dataset, reference_dataset))
+        ),
     }
     if reference_dataset is DataSource.SATELLITE:
         attrs["satellite_moving_average_half_window"] = (

@@ -9,6 +9,7 @@ import xarray as xr
 
 from pqtools.components.basins import BoundingBox
 from pqtools.components.basins import CoordinatesSelectionMethod
+from pqtools.components.dataset_versions import get_dataset_version
 
 
 class DataSource(Enum):
@@ -235,6 +236,7 @@ def download_data(
 
     dataset = copernicusmarine.open_dataset(
         dataset_id=DATASETS[data_source],
+        dataset_version=get_dataset_version(DATASETS[data_source]),
         variables=variables,
         start_datetime=_as_utc(start_date),
         end_datetime=_as_utc(end_date),

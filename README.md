@@ -156,9 +156,11 @@ of the requested period) and the following variables:
 | `satellite_std`       | mg m-3 | Spatial standard deviation of the satellite chlorophyll |
 | `satellite_coverage`  | %      | Percentage of the area of the basin covered by valid satellite data |
 
-The global attributes of the file record the basin and the options used for
-the satellite data. If a source has no data on some days of the period
-(e.g. the analysis before July 2024), its variables are NaN on those days.
+The global attributes of the file record the basin, the options used for the
+satellite data and, in `source_datasets`, the Copernicus Marine datasets that
+have been read, with their versions. If a source has no data on some days of
+the period (e.g. the analysis, which covers only the last few years), its
+variables are NaN on those days.
 
 ### `compute_comparison_maps`
 
@@ -194,8 +196,10 @@ variables:
 | `rms_difference`     | time                      | mg m-3 | Spatial root mean square of the differences (the bias is not removed) |
 | `reference_coverage` | time, latitude, longitude | 1      | Fraction (0 – 1) of the sea area of each cell covered by valid satellite data; only if the reference is the satellite |
 
-The global attributes of the file record the basin, the two datasets and, if
-the reference is the satellite, the options used for its data. The days without
+The global attributes of the file record the basin, the two datasets, the
+Copernicus Marine datasets that have been read with their versions
+(`source_datasets`) and, if the reference is the satellite, the options used
+for its data. The days without
 any valid cell (e.g. the ones available in only one of the two sources) are NaN.
 
 
@@ -280,8 +284,11 @@ Then:
 
 ## Things to keep in mind
 
-- **Data availability.** The analysis is available only from 23 July 2024,
-  while the reanalysis and the satellite cover several decades. If the
+- **Data availability.** The analysis covers only a rolling window of a bit
+  more than the last two years (the oldest days are removed as new ones are
+  added), while the reanalysis and the satellite cover several decades. Check
+  the current period with `poetry run copernicusmarine describe --dataset-id
+  cmems_mod_med_bgc-pft_anfc_4.2km_P1D-m`. If the
   requested period is *partially* outside the availability of a source, the
   missing days are NaN; if it is *entirely* outside, the command fails with
   an error raised by `copernicusmarine`.
@@ -303,7 +310,8 @@ Then:
   old versions of its datasets (`copernicusmarine` prints a warning when a
   version is going to be retired). If a dataset stops working, check the
   identifiers in `src/pqtools/components/data_retrievers.py` and
-  `src/pqtools/components/masks.py`.
+  `src/pqtools/components/masks.py`. The versions used for an output file are
+  recorded in its `source_datasets` attribute.
 - **Performance.** The data are read lazily with dask and only the parts
   needed for the requested period and basin are transferred. Long periods on
   large basins (e.g. the whole Mediterranean Sea at 1 km) still require
@@ -320,6 +328,7 @@ src/pqtools/
     ├── basins.py                  # Bounding boxes of the basins
     ├── data_retrievers.py         # Download and harmonisation of the data
     ├── basin_loader.py            # Loading of the basins (bitsea or YAML)
+    ├── dataset_versions.py        # Versions of the Copernicus Marine datasets
     ├── basin_data.py              # Masked data of the sources on a basin
     ├── satellite_processing.py    # Moving geometric mean of the satellite data
     ├── masks.py                   # Land/sea masks, basin masks and cell areas
