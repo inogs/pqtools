@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
+from pqtools.components.satellite_processing import _merge_small_chunks
 from pqtools.components.satellite_processing import log_moving_average
 
 
@@ -40,7 +41,9 @@ def data() -> xr.DataArray:
 
 
 @pytest.mark.parametrize("half_window", [1, 3])
-@pytest.mark.parametrize("time_chunk", [None, 2, 7, 10, 36])
+# With 40 days, a chunk of 13 days leaves a last chunk of 1 day, smaller than
+# the overlap (as it happens with the real data)
+@pytest.mark.parametrize("time_chunk", [None, 2, 7, 10, 13, 36])
 def test_log_moving_average(data, half_window, time_chunk):
     if time_chunk is not None:
         data_in = data.chunk(time=time_chunk, latitude=2)
@@ -52,3 +55,18 @@ def test_log_moving_average(data, half_window, time_chunk):
     np.testing.assert_allclose(
         result.values, _reference(data, half_window), rtol=1e-5
     )
+
+
+@pytest.mark.parametrize(
+    ("chunks", "expected"),
+    [
+        ((10, 10, 10, 1), (10, 10, 11)),
+        ((2, 2, 2, 2, 2), (4, 6)),
+        ((1, 10, 10), (11, 10)),
+        ((10, 2), (12,)),
+        ((3, 3, 3), (3, 3, 3)),
+        ((2,), (2,)),
+    ],
+)
+def test_merge_small_chunks(chunks, expected):
+    assert _merge_small_chunks(chunks, 3) == expected
